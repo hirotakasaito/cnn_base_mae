@@ -26,7 +26,7 @@ def arg_parse():
 
     #base param
     parser.add_argument("--epoch",type=int,default=1500)
-    parser.add_argument("--test-interval",type=int,default=10)
+    parser.add_argument("--test-interval",type=int,default=2)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument('--cuda', type=int, default=0, help='cuda number if -1, you can use CPU')
     parser.add_argument('--seed', type=int, default=10, help='random seed')
@@ -152,14 +152,9 @@ if __name__ == "__main__":
 
             for idx, data in enumerate(train_loader):
                 img = data
-                # noise_img , _ = RMG(img)
-                noise_img = kornia.filters.blur_pool2d(img,3)
-
                 img = img.permute(0,2,3,1).to(device,non_blocking=True)
                 _img = img.clone()
-                noise = torch.randn(args.batch_size,128,128,3)
-
-                mask = img[:,64:192,64:192,:]*0 + 0.9
+                mask = img[:,64:192,64:192,:]*0 + 1.0
                 mask_img = img
                 mask_img[:,64:192,64:192,:]= mask
                 clipping_img = _img[:,64:192,64:192,:]
@@ -175,8 +170,8 @@ if __name__ == "__main__":
                 with torch.cuda.amp.autocast():
                     recon_img = obs_model(embedded_img)
                     if args.loss_type == "mse":
-                        # mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
-                        mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').sum()
+                        mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
+                        # mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').sum()
                         loss = mse_loss_img
                     else:
                         ssim_loss = 1 - ssim(recon_img, clipping_img)
@@ -218,17 +213,18 @@ if __name__ == "__main__":
                         img = data
                         img = img.permute(0,2,3,1).to(device,non_blocking=True)
                         _img = img.clone()
+                        mask = img[:,64:192,64:192,:]*0 + 1.0
                         clipping_img = _img[:,64:192,64:192,:]
-                        mask = img[:,64:192,64:192,:]*0 + 0.9
 
                         mask_img = img
+
                         mask_img[:,64:192,64:192,:]= mask
                         embedded_img = encoder(mask_img)
 
                         recon_img = obs_model(embedded_img)
 
                         # img_loss = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
-                        img_loss = mse_loss(recon_img, clipping_img,reduction='none').sum()
+                        img_loss = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
                         # img_loss = binary_cross_entropy_with_logits(recon_img, img)
                         loss = img_loss
                         test_loss += loss.detach()
