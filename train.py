@@ -19,14 +19,13 @@ from util.dataset import BaseDataset
 from util.visualize import get_concat_h_multi, get_concat_v
 from model import *
 from pytorch_ssim import SSIM
-import kornia
 
 def arg_parse():
     parser = argparse.ArgumentParser(description='')
 
     #base param
     parser.add_argument("--epoch",type=int,default=1500)
-    parser.add_argument("--test-interval",type=int,default=2)
+    parser.add_argument("--test-interval",type=int,default=10)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument('--cuda', type=int, default=0, help='cuda number if -1, you can use CPU')
     parser.add_argument('--seed', type=int, default=10, help='random seed')
@@ -34,7 +33,7 @@ def arg_parse():
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--wd", type=float, default=0)
     parser.add_argument("--eps", type=float, default=1e-3)
-    parser.add_argument("--multi-gpu",type=str,default = False)
+    parser.add_argument("--multi-gpu",type=str,default = True)
     parser.add_argument("--log-image-interval",type=int,default = 2)
 
     #learning rate
@@ -46,7 +45,7 @@ def arg_parse():
     parser.add_argument('--log-dir', type=str, default='logs/attention/')
     parser.add_argument('--save-dir', type=str, default='weights')
     parser.add_argument('--logs-name',type=str,default='local')
-    parser.add_argument('--dataset-dir', type=str, default='/share/private/27th/hirotaka_saito/Images/test2/')
+    parser.add_argument('--dataset-dir', type=str, default='/share/private/27th/hirotaka_saito/Images/test/')
     parser.add_argument('--pretrained-dir', type=str, default=None)
 
     #size
@@ -93,15 +92,10 @@ if __name__ == "__main__":
     print("train_num: %d" % train_num)
     print("test_num : %d" % test_num)
     train_data, test_data = random_split(dataset, [train_num, test_num])
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers)
-    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=args.num_workers)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers,pin_memory=True)
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=args.num_workers,pin_memory=True)
 
     pi = torch.acos(torch.zeros(1)).item() * 2
-
-    # RMG = K.augmentation.RandomGaussianBlur(
-    #     kernel_size=(21, 21),
-    #     sigma=(2.0, 2.0),
-    #     p=1., return_transform = True)
 
     encoder = ResNetImageEncoder(
             observation_size = observation_size,
@@ -154,7 +148,8 @@ if __name__ == "__main__":
                 img = data
                 img = img.permute(0,2,3,1).to(device,non_blocking=True)
                 _img = img.clone()
-                mask = img[:,64:192,64:192,:]*0 + 1.0
+
+                mask = img[:,64:192,64:192,:]*0 + 0.9
                 mask_img = img
                 mask_img[:,64:192,64:192,:]= mask
                 clipping_img = _img[:,64:192,64:192,:]
@@ -170,8 +165,8 @@ if __name__ == "__main__":
                 with torch.cuda.amp.autocast():
                     recon_img = obs_model(embedded_img)
                     if args.loss_type == "mse":
+                        # mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
                         mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
-                        # mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').sum()
                         loss = mse_loss_img
                     else:
                         ssim_loss = 1 - ssim(recon_img, clipping_img)
@@ -213,11 +208,10 @@ if __name__ == "__main__":
                         img = data
                         img = img.permute(0,2,3,1).to(device,non_blocking=True)
                         _img = img.clone()
-                        mask = img[:,64:192,64:192,:]*0 + 1.0
                         clipping_img = _img[:,64:192,64:192,:]
+                        mask = img[:,64:192,64:192,:]*0 + 0.9
 
                         mask_img = img
-
                         mask_img[:,64:192,64:192,:]= mask
                         embedded_img = encoder(mask_img)
 
