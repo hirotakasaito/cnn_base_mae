@@ -9,11 +9,12 @@ def get_concat_h(im1, im2):
     dst.paste(im2, (im1.width, 0))
     return dst
 
-def get_concat_v(im1, im2,im3):
-    dst = Image.new('RGB', (im1.width, im1.height + im2.height + im3.height))
+def get_concat_v(im1, im2,im3,im4):
+    dst = Image.new('RGB', (im1.width, im1.height + im2.height + im3.height + im4.height))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (0, im1.height))
     dst.paste(im3, (0, im1.height + im2.height))
+    dst.paste(im4, (0, im1.height + im2.height + im3.height))
     return dst
 
 def get_concat_h_multi(im_list):

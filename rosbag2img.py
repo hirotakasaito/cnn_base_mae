@@ -40,7 +40,7 @@ if __name__ == '__main__':
         print("==== converted rosbag to jpeg ====")
 
         for idx,img in enumerate(images):
-            img_name = file_name + str(idx) + '.jpg'
+            img_name = file_name + str(idx) +'right'+ '.jpg'
             save_name = os.path.join(config["output_dir"],img_name)
             cv2.imwrite(save_name, img)
 
