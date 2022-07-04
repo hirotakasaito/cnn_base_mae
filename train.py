@@ -14,6 +14,7 @@ from tensorboardX import SummaryWriter
 import torchvision
 from tqdm import tqdm
 import time
+import random
 
 from util.prepare_output_dir import prepare_output_dir
 from util.dataset import BaseDataset
@@ -36,6 +37,7 @@ def arg_parse():
     parser.add_argument("--eps", type=float, default=1e-3)
     parser.add_argument("--multi-gpu",type=str,default = True)
     parser.add_argument("--log-image-interval",type=int,default = 2)
+    parser.add_argument("--size",type=int,default = 64)
 
     #learning rate
     parser.add_argument("--encoder-lr",type=float,default=1e-4)
@@ -46,7 +48,7 @@ def arg_parse():
     parser.add_argument('--log-dir', type=str, default='logs/attention/')
     parser.add_argument('--save-dir', type=str, default='weights')
     parser.add_argument('--logs-name',type=str,default='local')
-    parser.add_argument('--dataset-dir', type=str, default='/share/private/27th/hirotaka_saito/Images/test/')
+    parser.add_argument('--dataset-dir', type=str, default='/share/private/27th/hirotaka_saito/Images/test2/')
     parser.add_argument('--pretrained-dir', type=str, default=None)
 
     #size
@@ -149,8 +151,10 @@ if __name__ == "__main__":
 
     best_loss = np.inf
     num_update = 0
-
+    size = args.size
     torch.backends.cudnn.benchmark = True
+    random_mask = np.array([[96,96],[96,48],[96,144],[48,48],[48,96],[48,144],[144,48],[144,96],[144,144]])
+    # mask = img[:,96:160,96:160,:]*0 + 0.9
 
     with tqdm(range(args.epoch)) as pbar:
         for epoch in pbar:
@@ -169,12 +173,13 @@ if __name__ == "__main__":
                 _img = img.clone()
 
                 # mask = img[:,64:192,64:192,:]*0 + 0.9
-                mask = img[:,96:160,96:160,:]*0 + 0.9
+                i = random.randint(0,8)
+                mask = img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]*0 + 0.9
                 mask_img = img
                 # mask_img[:,64:192,64:192,:]= mask
-                mask_img[:,96:160,96:160,:]= mask
+                mask_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]= mask
                 # clipping_img = _img[:,64:192,64:192,:]
-                clipping_img = _img[:,96:160,96:160,:]
+                clipping_img = _img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]
                 embedded_img, attn = encoder(mask_img)
 
                 # recon_img = obs_model(embedded_img)
@@ -209,7 +214,7 @@ if __name__ == "__main__":
                 del mask_img
             scheduler.step()
 
-            writer.add_scalar('rssm/train/loss', train_loss/num_update, epoch)
+            writer.add_scalar('cnn_base_mae/train/loss', train_loss/num_update, epoch)
             # writer.add_scalar('rssm/train/img_loss', train_img_loss/num_update, epoch)
             pbar.set_postfix(OrderedDict(Loss=train_loss/num_update))
 
@@ -232,13 +237,17 @@ if __name__ == "__main__":
                         img = img.permute(0,2,3,1).to(device,non_blocking=True)
                         _img = img.clone()
                         # clipping_img = _img[:,64:192,64:192,:]
-                        clipping_img = _img[:,96:160,96:160,:]
+                        # clipping_img = _img[:,96:160,96:160,:]
+                        i = random.randint(0,8)
+                        clipping_img = _img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]
                         # mask = img[:,64:192,64:192,:]*0 + 0.9
-                        mask = img[:,96:160,96:160,:]*0 + 0.9
+                        mask = img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]*0 + 0.9
+                        # mask = img[:,96:160,96:160,:]*0 + 0.9
 
                         mask_img = img
                         # mask_img[:,64:192,64:192,:]= mask
-                        mask_img[:,96:160,96:160,:]= mask
+                        mask_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]= mask
+                        # mask_img[:,96:160,96:160,:]= mask
                         embedded_img, attn = encoder(mask_img)
 
                         recon_img = obs_model(embedded_img)
@@ -260,7 +269,7 @@ if __name__ == "__main__":
                         _attn = trans(_attn[0,0])
                         _attn = _attn.resize((256,256))
                         # _concat_img[:,64:192,64:192,:] = _recon_img
-                        _concat_img[:,96:160,96:160,:] = _recon_img
+                        _concat_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:] = _recon_img
                         _concat_img = trans(_concat_img[0].permute(2,0,1))
                         _mask_img = trans(_mask_img[0].permute(2,0,1))
 
@@ -275,7 +284,7 @@ if __name__ == "__main__":
                         del recon_img
                         del mask_img
 
-                        if idx == 10:
+                        if idx == 5:
                             # ob = trans(ob[[2,1,0],:,:])
                             # recon_ob = trans(recon_ob[[2,1,0],:,:])
                             attn_imgs = get_concat_h_multi(attn_list)
@@ -283,17 +292,14 @@ if __name__ == "__main__":
                             mask_imgs = get_concat_h_multi(mask_img_list)
                             concat_imgs = get_concat_h_multi(concat_img_list)
                             output_img = get_concat_v(trust_imgs,mask_imgs,concat_imgs,attn_imgs)
-
                             # output_trust_img_np = np.asarray(trust_imgs).transpose(2,0,1)
                             # output_mask_img_np = np.asarray(mask_imgs).transpose(2,0,1)
                             # output_concat_img_np = np.asarray(concat_imgs).transpose(2,0,1)
                             output_img_np = np.asarray(output_img).transpose(2,0,1)
-
                             # writer.add_image('rssm/test/trust_img', output_trust_img_np, epoch)
                             # writer.add_image('rssm/test/mask_img', output_mask_img_np, epoch)
                             # writer.add_image('rssm/test/concat_img', output_concat_img_np, epoch)
                             writer.add_image('cnn_base_mae/test/outpu_img', output_img_np, epoch)
-
                             img_list.clear()
                             mask_img_list.clear()
                             concat_img_list.clear()
