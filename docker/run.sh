@@ -15,5 +15,5 @@ docker run -it \
   --mount type=bind,source=$dataset,target=/root/dataset \
    --net host \
    --shm-size=100000m \
-  CnnBaseMAE
+  cnnbasemae
   bash

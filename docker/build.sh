@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build -t CnnBaseMAE .
+docker build -t cnnbasemae .
