@@ -13,12 +13,12 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-b", "--rosbag-dir", type=str, default="/share/private/27th/hirotaka_saito/bagfile/sq2/d_kan1/badgr_base1/")
-    parser.add_argument("-o", "--output-dir", type=str, default="/share/private/27th/hirotaka_saito/Images/d_kan1/")
+    parser.add_argument("-o", "--output-dir", type=str, default="/share/private/27th/hirotaka_saito/Images/d_kan1_2_10pt/")
     parser.add_argument("-c", "--config-dir", type=str, default="/home/amsl/cnn_base_mae/config/")
     args = parser.parse_args()
 
     config = {}
-    config["topics"] = ["front_right_camera/color/image_raw/compressed"]
+    config["topics"] = ["camera/color/image_raw/compressed"]
     # config["topics"] = ["usb_cam/image_raw/compressed"]
     config["hz"] = 10
     config["output_dir"] = args.output_dir
@@ -51,7 +51,7 @@ def main():
     for config_path in iglob(os.path.join(args.config_dir,"*")):
         config_name = os.path.basename(config_path)
         print(config_name)
-        command = "python3 ./rosbag2img.py --config " + args.config_dir + config_name
+        command = "python3 ./rosbag2tensor.py --config " + args.config_dir + config_name
 
         proc = subprocess.run(command,shell=True,stdout=subprocess.PIPE,text=True)
         print(proc.check_returncode())

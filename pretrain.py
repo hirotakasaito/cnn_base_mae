@@ -7,19 +7,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import cv2
 from torch.nn.functional import mse_loss, binary_cross_entropy_with_logits
 from torch.utils.data import DataLoader,random_split
 from tensorboardX import SummaryWriter
 import torchvision
 from tqdm import tqdm
 import time
+import random
 
 from util.prepare_output_dir import prepare_output_dir
 from util.dataset import BaseDataset
 from util.visualize import get_concat_h_multi, get_concat_v
 from model import *
-from pytorch_ssim import SSIM
-import kornia
 
 def arg_parse():
     parser = argparse.ArgumentParser(description='')
@@ -36,6 +36,7 @@ def arg_parse():
     parser.add_argument("--eps", type=float, default=1e-3)
     parser.add_argument("--multi-gpu",type=str,default = False)
     parser.add_argument("--log-image-interval",type=int,default = 2)
+    parser.add_argument("--size",type=int,default = 64)
 
     #learning rate
     parser.add_argument("--encoder-lr",type=float,default=1e-4)
@@ -43,10 +44,11 @@ def arg_parse():
     parser.add_argument("--loss-type",type=str,default="mse")
 
     #dir setting
-    parser.add_argument('--log-dir', type=str, default='logs/attention/')
+    parser.add_argument('--log-dir', type=str, default='/root/logs/pretrain/')
     parser.add_argument('--save-dir', type=str, default='weights')
     parser.add_argument('--logs-name',type=str,default='local')
-    parser.add_argument('--dataset-dir', type=str, default='/share/private/27th/hirotaka_saito/Images/test2/')
+    parser.add_argument('--dataset-dir', type=str, default='/root/dataset/Images/d_kan1_1')
+    # parser.add_argument('--pretrained-dir', type=str, default="/root/logs/pretrain/20220710T201609.607676")
     parser.add_argument('--pretrained-dir', type=str, default=None)
 
     #size
@@ -93,15 +95,10 @@ if __name__ == "__main__":
     print("train_num: %d" % train_num)
     print("test_num : %d" % test_num)
     train_data, test_data = random_split(dataset, [train_num, test_num])
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers)
-    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=args.num_workers)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers,pin_memory=True)
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=args.num_workers,pin_memory=True)
 
     pi = torch.acos(torch.zeros(1)).item() * 2
-
-    # RMG = K.augmentation.RandomGaussianBlur(
-    #     kernel_size=(21, 21),
-    #     sigma=(2.0, 2.0),
-    #     p=1., return_transform = True)
 
     encoder = ResNetImageEncoder(
             observation_size = observation_size,
@@ -116,7 +113,6 @@ if __name__ == "__main__":
             ).to(device)
 
     trans = torchvision.transforms.ToPILImage()
-    ssim = SSIM()
 
     optimizer = optim.AdamW(params=[
         {"params": encoder.parameters(), "lr": args.encoder_lr},
@@ -136,8 +132,10 @@ if __name__ == "__main__":
 
     best_loss = np.inf
     num_update = 0
-
+    size = args.size
     torch.backends.cudnn.benchmark = True
+    random_mask = np.array([[96,96],[96,48],[96,144],[48,48],[48,96],[48,144],[144,48],[144,96],[144,144]])
+    # mask = img[:,96:160,96:160,:]*0 + 0.9
 
     with tqdm(range(args.epoch)) as pbar:
         for epoch in pbar:
@@ -152,27 +150,22 @@ if __name__ == "__main__":
 
             for idx, data in enumerate(train_loader):
                 img = data
-
-                # mask = kornia.filters.blur_pool2d(img,kernel_size = 3, stride = 1)
                 img = img.permute(0,2,3,1).to(device,non_blocking=True)
                 _img = img.clone()
-                mask = kornia.filters.gaussian_blur2d(img[:,64:192,64:192,:], (3,3),(1.5,1.5))
+
+                i = random.randint(0,8)
+                mask = img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]*0 + 0.9
                 mask_img = img
-                mask_img[:,64:192,64:192,:]= mask
-                clipping_img = _img[:,64:192,64:192,:]
+                mask_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]= mask
+                clipping_img = _img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]
                 embedded_img = encoder(mask_img)
 
                 optimizer.zero_grad()
 
                 with torch.cuda.amp.autocast():
                     recon_img = obs_model(embedded_img)
-                    if args.loss_type == "mse":
-                        # mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
-                        mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').sum()
-                        loss = mse_loss_img
-                    else:
-                        ssim_loss = 1 - ssim(recon_img, clipping_img)
-                        loss = ssim_loss
+                    mse_loss_img = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
+                    loss = mse_loss_img
 
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
@@ -202,33 +195,34 @@ if __name__ == "__main__":
                     mask_img_list = []
                     img_list = []
                     concat_img_list = []
+                    attn_list = []
                     for idx, data in enumerate(test_loader):
                         img = data
                         img = img.permute(0,2,3,1).to(device,non_blocking=True)
                         _img = img.clone()
-                        mask = kornia.filters.gaussian_blur2d(img[:,64:192,64:192,:],(3,3),(1.5,1.5))
-                        clipping_img = _img[:,64:192,64:192,:]
+                        i = random.randint(0,8)
+                        clipping_img = _img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]
+                        mask = img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]*0 + 0.9
 
                         mask_img = img
-
-                        mask_img[:,64:192,64:192,:]= mask
+                        mask_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:]= mask
                         embedded_img = encoder(mask_img)
 
                         recon_img = obs_model(embedded_img)
 
-                        # img_loss = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
-                        img_loss = mse_loss(recon_img, clipping_img,reduction='none').sum()
-                        # img_loss = binary_cross_entropy_with_logits(recon_img, img)
+                        img_loss = mse_loss(recon_img, clipping_img,reduction='none').mean([0]).sum()
                         loss = img_loss
                         test_loss += loss.detach()
                         num_update += 1
+
                         #for visualize img
                         _vimg = _img.detach().to('cpu')
                         _concat_img = mask_img.detach().to('cpu')
                         _mask_img = mask_img.detach().to('cpu')
                         _recon_img = recon_img.to('cpu')
+
                         _vimg = trans(_vimg[0].permute(2,0,1))
-                        _concat_img[:,64:192,64:192,:] = _recon_img
+                        _concat_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:] = _recon_img
                         _concat_img = trans(_concat_img[0].permute(2,0,1))
                         _mask_img = trans(_mask_img[0].permute(2,0,1))
 
@@ -242,21 +236,19 @@ if __name__ == "__main__":
                         del recon_img
                         del mask_img
 
-                        if idx == 10:
+                        if idx == 5:
                             trust_imgs = get_concat_h_multi(img_list)
                             mask_imgs = get_concat_h_multi(mask_img_list)
                             concat_imgs = get_concat_h_multi(concat_img_list)
                             output_img = get_concat_v(trust_imgs,mask_imgs,concat_imgs)
-
                             output_img_np = np.asarray(output_img).transpose(2,0,1)
 
                             writer.add_image('cnn_base_mae/test/outpu_img', output_img_np, epoch)
-
                             img_list.clear()
                             mask_img_list.clear()
                             concat_img_list.clear()
 
-                writer.add_scalar('rssm/test/loss', test_loss/num_update, epoch)
+                writer.add_scalar('cnn_base_mae/test/loss', test_loss/num_update, epoch)
 
                 # save model
                 if args.multi_gpu:

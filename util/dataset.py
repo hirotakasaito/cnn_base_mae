@@ -38,5 +38,12 @@ class BaseDataset(torch.utils.data.Dataset):
         img = self.convert_tensor(img)
         # img = torch.load(img_path)
         # img = img[0]
-
         return img
+
+class EachSizeDataset(BaseDataset):
+
+    def __getitem__(self, index):
+        img_path = self.img_paths[index]
+        img = torch.load(img_path)
+        return img
+
