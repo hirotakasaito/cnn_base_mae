@@ -26,8 +26,8 @@ def arg_parse():
 
     #base param
     parser.add_argument("--epoch",type=int,default=1500)
-    parser.add_argument("--test-interval",type=int,default=2)
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--test-interval",type=int,default=10)
+    parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument('--cuda', type=int, default=0, help='cuda number if -1, you can use CPU')
     parser.add_argument('--seed', type=int, default=10, help='random seed')
     parser.add_argument('--num-workers', type=int, default=4, help='number of cpu')
@@ -36,11 +36,11 @@ def arg_parse():
     parser.add_argument("--eps", type=float, default=1e-3)
     parser.add_argument("--multi-gpu",type=str,default = False)
     parser.add_argument("--log-image-interval",type=int,default = 2)
-    parser.add_argument("--size",type=int,default = 64)
+    parser.add_argument("--size",type=int,default = 128)
 
     #learning rate
-    parser.add_argument("--encoder-lr",type=float,default=2e-4)
-    parser.add_argument("--obs_lr",type=float,default=2e-4)
+    parser.add_argument("--encoder-lr",type=float,default=5e-4)
+    parser.add_argument("--obs_lr",type=float,default=5e-4)
     parser.add_argument("--loss-type",type=str,default="mse")
 
     #dir setting
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     num_update = 0
     size = args.size
     torch.backends.cudnn.benchmark = True
-    random_mask = np.array([[96,96],[96,48],[96,144],[48,48],[48,96],[48,144],[144,48],[144,96],[144,144]])
+    random_mask = np.array([[0,0],[0,64],[0,128],[64,0],[64,64],[64,128],[128,0],[128,64],[128,128]])
     # mask = img[:,96:160,96:160,:]*0 + 0.9
 
     with tqdm(range(args.epoch)) as pbar:
@@ -203,6 +203,7 @@ if __name__ == "__main__":
                     for idx, datas in enumerate(test_loader):
                         datas = torch.squeeze(datas)
                         datas = datas.transpose(1,0)
+                        j = 0
                         for img in datas:
                             # img = img.permute(0,2,3,1).to(device,non_blocking=True)
                             img = img.to(device,non_blocking=True)/255
@@ -223,19 +224,22 @@ if __name__ == "__main__":
                             num_update += 1
 
                             #for visualize img
-                            _vimg = _img.detach().to('cpu')
-                            _concat_img = mask_img.detach().to('cpu')
-                            _mask_img = mask_img.detach().to('cpu')
-                            _recon_img = recon_img.to('cpu')
+                            if j % len(datas) == 0:
+                                _vimg = _img.detach().to('cpu')
+                                _concat_img = mask_img.detach().to('cpu')
+                                _mask_img = mask_img.detach().to('cpu')
+                                _recon_img = recon_img.to('cpu')
 
-                            _vimg = trans(_vimg[0].permute(2,0,1))
-                            _concat_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:] = _recon_img
-                            _concat_img = trans(_concat_img[0].permute(2,0,1))
-                            _mask_img = trans(_mask_img[0].permute(2,0,1))
+                                _vimg = trans(_vimg[0].permute(2,0,1))
+                                _concat_img[:,random_mask[i][0]:random_mask[i][0]+size,random_mask[i][1]:random_mask[i][1]+size,:] = _recon_img
+                                _concat_img = trans(_concat_img[0].permute(2,0,1))
+                                _mask_img = trans(_mask_img[0].permute(2,0,1))
 
-                            img_list.append(_vimg)
-                            mask_img_list.append(_mask_img)
-                            concat_img_list.append(_concat_img)
+                                img_list.append(_vimg)
+                                mask_img_list.append(_mask_img)
+                                concat_img_list.append(_concat_img)
+
+                            j += 1
 
                             del loss
                             del img
@@ -243,13 +247,13 @@ if __name__ == "__main__":
                             del recon_img
                             del mask_img
                         del datas
-                        if idx == 5:
+                        if idx == 10:
                             trust_imgs = get_concat_h_multi(img_list)
                             mask_imgs = get_concat_h_multi(mask_img_list)
                             concat_imgs = get_concat_h_multi(concat_img_list)
                             output_img = get_concat_v(trust_imgs,mask_imgs,concat_imgs)
                             output_img_np = np.asarray(output_img).transpose(2,0,1)
-
+                            output_img_np = output_img_np[[2,1,0],:,:]
                             writer.add_image('cnn_base_mae/test/outpu_img', output_img_np, epoch)
                             img_list.clear()
                             mask_img_list.clear()

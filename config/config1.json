@@ -4,10 +4,10 @@
     ],
     "hz": 10,
     "output_dir": "/share/private/27th/hirotaka_saito/Images/d_kan1_2_10pt/",
-    "bagfile_dir": "/share/private/27th/hirotaka_saito/bagfile/sq2/d_kan1/badgr_base1/",
+    "bagfile_dir": "/share/private/27th/hirotaka_saito/bagfile/sq2/d_kan1/ibag/",
     "width": 256,
     "height": 256,
     "bagfile_name": [
-        "2022-05-02-13-58-18.bag"
+        "2022-05-12-15-26-05.bag"
     ]
 }

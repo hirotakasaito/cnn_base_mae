@@ -12,7 +12,7 @@ def main():
     print("\n" + "==== Config Creater ====" + "\n")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-b", "--rosbag-dir", type=str, default="/share/private/27th/hirotaka_saito/bagfile/sq2/d_kan1/badgr_base1/")
+    parser.add_argument("-b", "--rosbag-dir", type=str, default="/share/private/27th/hirotaka_saito/bagfile/sq2/d_kan1/ibag/")
     parser.add_argument("-o", "--output-dir", type=str, default="/share/private/27th/hirotaka_saito/Images/d_kan1_2_10pt/")
     parser.add_argument("-c", "--config-dir", type=str, default="/home/amsl/cnn_base_mae/config/")
     args = parser.parse_args()
